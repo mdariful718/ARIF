@@ -17,7 +17,9 @@ db.exec(`
     email TEXT UNIQUE,
     password TEXT,
     wallet_balance REAL DEFAULT 0,
-    role TEXT DEFAULT 'user'
+    role TEXT DEFAULT 'user',
+    provider TEXT DEFAULT 'local',
+    provider_id TEXT
   );
 
   CREATE TABLE IF NOT EXISTS packages (
@@ -47,6 +49,12 @@ db.exec(`
     value TEXT
   );
 `);
+
+  // Add provider and provider_id columns if they don't exist
+  try {
+    db.prepare("ALTER TABLE users ADD COLUMN provider TEXT DEFAULT 'local'").run();
+    db.prepare("ALTER TABLE users ADD COLUMN provider_id TEXT").run();
+  } catch (e) {}
 
   // Add completed_at column if it doesn't exist
   try {
