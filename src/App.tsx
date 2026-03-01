@@ -244,11 +244,18 @@ const ManualPaymentVerification = ({ isOpen, onClose, method, amount, onVerify }
       <motion.div 
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className={`${themeColor} w-full max-w-md rounded-3xl overflow-hidden shadow-2xl text-white`}
+        className={`${themeColor} w-full max-w-md rounded-3xl overflow-hidden shadow-2xl text-white relative`}
       >
+        <button 
+          onClick={onClose} 
+          className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 transition-all z-[999] group"
+          title="বন্ধ করুন"
+        >
+          <X className="w-6 h-6 group-hover:rotate-90 transition-transform duration-300" />
+        </button>
+
         <div className="p-6 flex justify-between items-center border-b border-white/10">
           <h3 className="text-xl font-bold uppercase tracking-tighter">Payment Verification</h3>
-          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X className="w-6 h-6" /></button>
         </div>
 
         <div className="p-8 space-y-6">
@@ -477,13 +484,20 @@ const TrackOrderModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
       <motion.div 
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="bg-zinc-900 border border-zinc-800 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl"
+        className="bg-zinc-900 border border-zinc-800 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl relative"
       >
+        <button 
+          onClick={onClose} 
+          className="absolute top-4 right-4 p-2 rounded-full text-zinc-500 hover:text-red-500 hover:bg-red-500/10 transition-all z-[999] group"
+          title="বন্ধ করুন"
+        >
+          <X className="w-6 h-6 group-hover:rotate-90 transition-transform duration-300" />
+        </button>
+
         <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <Search className="w-5 h-5 text-emerald-500" /> Track Order (অর্ডার স্ট্যাটাস)
           </h2>
-          <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-full text-zinc-400"><X className="w-6 h-6" /></button>
         </div>
 
         <div className="p-6 space-y-6">
@@ -666,7 +680,7 @@ const OrderModal = ({ isOpen, onClose, category, packages, user, onOrderSuccess,
       <motion.div 
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="bg-zinc-900 border border-zinc-800 w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl"
+        className="bg-zinc-900 border border-zinc-800 w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl relative"
       >
         <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-800/50">
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -674,7 +688,7 @@ const OrderModal = ({ isOpen, onClose, category, packages, user, onOrderSuccess,
           </h2>
           <button 
             onClick={onClose} 
-            className="p-2 hover:bg-red-500/10 hover:text-red-500 rounded-full text-zinc-400 transition-all group"
+            className="p-2 hover:bg-red-500/10 hover:text-red-500 rounded-full text-zinc-400 transition-all z-[999] group"
             title="বন্ধ করুন"
           >
             <X className="w-6 h-6 group-hover:rotate-90 transition-transform duration-300" />
@@ -993,7 +1007,7 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess, initialMode = 'login', init
       >
         <button 
           onClick={handleClose} 
-          className="absolute top-4 right-4 p-2 rounded-full text-zinc-500 hover:text-red-500 hover:bg-red-500/10 transition-all z-10 group"
+          className="absolute top-5 right-5 p-2 rounded-full text-zinc-500 hover:text-red-500 hover:bg-red-500/10 transition-all z-[999] group"
           title="বন্ধ করুন"
         >
           <X className="w-6 h-6 group-hover:rotate-90 transition-transform duration-300" />
@@ -1291,7 +1305,13 @@ const Dashboard = ({ user, isOpen, onClose }: { user: User | null, isOpen: boole
               <p className="text-zinc-500 text-sm">{user ? user.email : 'No account connected'}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-full text-zinc-400"><X /></button>
+          <button 
+            onClick={onClose} 
+            className="p-2 hover:bg-zinc-800 rounded-full text-zinc-400 transition-all z-[999] group"
+            title="বন্ধ করুন"
+          >
+            <X className="w-6 h-6 group-hover:rotate-90 transition-transform duration-300" />
+          </button>
         </div>
 
         <div className="flex border-b border-zinc-800 items-center pr-4">
