@@ -5,6 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import axios from "axios";
 import dotenv from "dotenv";
+import { OAuth2Client } from "google-auth-library";
 
 dotenv.config();
 
@@ -12,6 +13,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const db = new Database("database.db");
+
+const googleClient = new OAuth2Client(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  `${process.env.APP_URL || 'http://localhost:3000'}/auth/callback`
+);
 
 // Initialize Database
 db.exec(`
@@ -74,6 +81,12 @@ db.exec(`
   try {
     db.prepare("ALTER TABLE orders ADD COLUMN payment_method TEXT DEFAULT 'wallet'").run();
     db.prepare("ALTER TABLE orders ADD COLUMN transaction_id TEXT").run();
+  } catch (e) {}
+
+  // Add contact_number and order_id_string columns if they don't exist
+  try {
+    db.prepare("ALTER TABLE orders ADD COLUMN contact_number TEXT").run();
+    db.prepare("ALTER TABLE orders ADD COLUMN order_id_string TEXT").run();
   } catch (e) {}
 
 // Seed initial data if empty
@@ -235,14 +248,11 @@ async function startServer() {
     let authUrl = "";
 
     if (provider === "google") {
-      const params = new URLSearchParams({
-        client_id: process.env.GOOGLE_CLIENT_ID!,
-        redirect_uri: redirectUri,
-        response_type: "code",
-        scope: "openid email profile",
+      authUrl = googleClient.generateAuthUrl({
+        access_type: "offline",
+        scope: ["openid", "email", "profile"],
         state: "google"
       });
-      authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
     } else if (provider === "facebook") {
       const params = new URLSearchParams({
         client_id: process.env.FACEBOOK_APP_ID!,
@@ -275,23 +285,22 @@ async function startServer() {
 
     try {
       if (state === "google") {
-        const tokenRes = await axios.post("https://oauth2.googleapis.com/token", {
-          code,
-          client_id: process.env.GOOGLE_CLIENT_ID,
-          client_secret: process.env.GOOGLE_CLIENT_SECRET,
-          redirect_uri: redirectUri,
-          grant_type: "authorization_code"
+        const { tokens } = await googleClient.getToken(code as string);
+        googleClient.setCredentials(tokens);
+        const ticket = await googleClient.verifyIdToken({
+          idToken: tokens.id_token!,
+          audience: process.env.GOOGLE_CLIENT_ID
         });
-        const userRes = await axios.get("https://www.googleapis.com/oauth2/v2/userinfo", {
-          headers: { Authorization: `Bearer ${tokenRes.data.access_token}` }
-        });
-        userData = {
-          name: userRes.data.name,
-          email: userRes.data.email,
-          provider: "google",
-          provider_id: userRes.data.id,
-          profile_pic: userRes.data.picture
-        };
+        const payload = ticket.getPayload();
+        if (payload) {
+          userData = {
+            name: payload.name,
+            email: payload.email,
+            provider: "google",
+            provider_id: payload.sub,
+            profile_pic: payload.picture
+          };
+        }
       } else if (state === "facebook") {
         const tokenRes = await axios.get("https://graph.facebook.com/v12.0/oauth/access_token", {
           params: {
@@ -375,23 +384,55 @@ async function startServer() {
   });
 
   app.post("/api/orders", (req, res) => {
-    const { user_id, package_id, player_uid, payment_method, transaction_id } = req.body;
+    const { user_id, package_id, player_uid, payment_method, transaction_id, contact_number } = req.body;
     const pkg = db.prepare("SELECT price FROM packages WHERE id = ?").get(package_id) as any;
-    const user = db.prepare("SELECT wallet_balance FROM users WHERE id = ?").get(user_id) as any;
+    
+    // Generate a unique human-readable Order ID
+    const orderIdString = "#CVV" + Math.floor(1000 + Math.random() * 9000);
 
     if (payment_method === 'wallet') {
+      if (!user_id) return res.status(400).json({ success: false, message: "Wallet payment requires login" });
+      const user = db.prepare("SELECT wallet_balance FROM users WHERE id = ?").get(user_id) as any;
       if (user.wallet_balance >= pkg.price) {
         db.prepare("UPDATE users SET wallet_balance = wallet_balance - ? WHERE id = ?").run(pkg.price, user_id);
-        db.prepare("INSERT INTO orders (user_id, package_id, player_uid, payment_method) VALUES (?, ?, ?, ?)").run(user_id, package_id, player_uid, 'wallet');
-        res.json({ success: true, message: "Order placed successfully" });
+        const info = db.prepare("INSERT INTO orders (user_id, package_id, player_uid, payment_method, order_id_string) VALUES (?, ?, ?, ?, ?)").run(user_id, package_id, player_uid, 'wallet', orderIdString);
+        res.json({ success: true, message: "Order placed successfully", order_id_string: orderIdString, id: info.lastInsertRowid });
       } else {
         res.status(400).json({ success: false, message: "Insufficient wallet balance" });
       }
     } else {
       // Manual payment (Instant Pay)
-      db.prepare("INSERT INTO orders (user_id, package_id, player_uid, payment_method, transaction_id) VALUES (?, ?, ?, ?, ?)").run(user_id, package_id, player_uid, payment_method, transaction_id);
-      res.json({ success: true, message: "Order submitted for verification" });
+      const info = db.prepare("INSERT INTO orders (user_id, package_id, player_uid, payment_method, transaction_id, contact_number, order_id_string) VALUES (?, ?, ?, ?, ?, ?, ?)").run(user_id || null, package_id, player_uid, payment_method, transaction_id, contact_number, orderIdString);
+      res.json({ success: true, message: "Order submitted for verification", order_id_string: orderIdString, id: info.lastInsertRowid });
     }
+  });
+
+  app.get("/api/orders/track/:query", (req, res) => {
+    const { query } = req.params;
+    const orders = db.prepare(`
+      SELECT orders.*, packages.name as package_name, packages.price 
+      FROM orders 
+      JOIN packages ON orders.package_id = packages.id 
+      WHERE orders.order_id_string = ? OR orders.contact_number = ?
+      ORDER BY created_at DESC
+    `).all(query, query);
+    res.json(orders);
+  });
+
+  app.post("/api/orders/guest-history", (req, res) => {
+    const { orderIds } = req.body; // Array of order_id_string
+    if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.json([]);
+    }
+    const placeholders = orderIds.map(() => "?").join(",");
+    const orders = db.prepare(`
+      SELECT orders.*, packages.name as package_name, packages.price 
+      FROM orders 
+      JOIN packages ON orders.package_id = packages.id 
+      WHERE orders.order_id_string IN (${placeholders})
+      ORDER BY created_at DESC
+    `).all(...orderIds);
+    res.json(orders);
   });
 
   app.get("/api/orders/:user_id", (req, res) => {

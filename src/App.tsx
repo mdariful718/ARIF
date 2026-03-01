@@ -17,7 +17,8 @@ import {
   CreditCard,
   LayoutDashboard,
   Settings,
-  Bell
+  Bell,
+  Search
 } from 'lucide-react';
 
 // --- Types ---
@@ -94,7 +95,7 @@ const Logo = ({ className = "w-10 h-10", showText = false, orientation = "vertic
   </div>
 );
 
-const Header = ({ user, onLogout, onOpenAuth, onOpenDashboard }: { user: User | null, onLogout: () => void, onOpenAuth: () => void, onOpenDashboard: () => void }) => {
+const Header = ({ user, onLogout, onOpenAuth, onOpenDashboard, onOpenTrack }: { user: User | null, onLogout: () => void, onOpenAuth: () => void, onOpenDashboard: () => void, onOpenTrack: () => void }) => {
   return (
     <header className="bg-zinc-900 border-b border-zinc-800 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -103,6 +104,20 @@ const Header = ({ user, onLogout, onOpenAuth, onOpenDashboard }: { user: User | 
         </div>
 
         <div className="flex items-center gap-4">
+          <button 
+            onClick={onOpenTrack}
+            className="hidden sm:flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-lg transition-all"
+          >
+            <Search className="w-4 h-4" /> Track Order
+          </button>
+          {!user && (
+            <button 
+              onClick={onOpenDashboard}
+              className="hidden sm:flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-lg transition-all"
+            >
+              <History className="w-4 h-4" /> My Orders
+            </button>
+          )}
           {user ? (
             <div className="flex items-center gap-3">
               <div className="hidden md:flex flex-col items-end">
@@ -209,8 +224,9 @@ const ServiceCard = ({ title, icon: Icon, onClick }: { title: string, icon: any,
   </motion.div>
 );
 
-const ManualPaymentVerification = ({ isOpen, onClose, method, amount, onVerify }: { isOpen: boolean, onClose: () => void, method: 'bkash' | 'nagad', amount: number, onVerify: (trxId: string) => void }) => {
+const ManualPaymentVerification = ({ isOpen, onClose, method, amount, onVerify }: { isOpen: boolean, onClose: () => void, method: 'bkash' | 'nagad', amount: number, onVerify: (trxId: string, contact: string) => void }) => {
   const [trxId, setTrxId] = useState('');
+  const [contact, setContact] = useState('');
   const merchantNumber = "01766315534";
   const isNagad = method === 'nagad';
   const themeColor = isNagad ? 'bg-[#ED1C24]' : 'bg-[#E2136E]';
@@ -236,15 +252,27 @@ const ManualPaymentVerification = ({ isOpen, onClose, method, amount, onVerify }
         </div>
 
         <div className="p-8 space-y-6">
-          <div className="text-center">
-            <label className="block text-sm font-bold uppercase mb-3 opacity-80">ট্রান্সেকশন আইডি দিন</label>
-            <input 
-              type="text" 
-              value={trxId}
-              onChange={(e) => setTrxId(e.target.value)}
-              placeholder="Enter TrxID"
-              className="w-full bg-white text-zinc-900 rounded-xl px-4 py-4 text-center font-black text-xl focus:outline-none shadow-inner"
-            />
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold uppercase mb-2 opacity-80">আপনার হোয়াটসঅ্যাপ বা কন্টাক্ট নম্বর দিন</label>
+              <input 
+                type="text" 
+                value={contact}
+                onChange={(e) => setContact(e.target.value)}
+                placeholder="01XXXXXXXXX"
+                className="w-full bg-white text-zinc-900 rounded-xl px-4 py-3 font-bold focus:outline-none shadow-inner"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase mb-2 opacity-80 text-center">ট্রান্সেকশন আইডি দিন</label>
+              <input 
+                type="text" 
+                value={trxId}
+                onChange={(e) => setTrxId(e.target.value)}
+                placeholder="Enter TrxID"
+                className="w-full bg-white text-zinc-900 rounded-xl px-4 py-4 text-center font-black text-xl focus:outline-none shadow-inner"
+              />
+            </div>
           </div>
 
           <div className="bg-black/10 rounded-2xl p-6 space-y-4 text-sm leading-relaxed">
@@ -285,8 +313,9 @@ const ManualPaymentVerification = ({ isOpen, onClose, method, amount, onVerify }
 
           <button 
             onClick={() => {
-              onVerify(trxId);
+              onVerify(trxId, contact);
               setTrxId('');
+              setContact('');
             }}
             disabled={!trxId}
             className={`w-full py-4 bg-white text-zinc-900 font-black text-xl rounded-2xl transition-all shadow-lg disabled:opacity-50 active:scale-95`}
@@ -414,7 +443,97 @@ const PaymentGateway = ({ isOpen, onClose, amount, merchantName, onManualPayment
   );
 };
 
-const OrderModal = ({ isOpen, onClose, category, packages, user, onOrderSuccess, onOpenAuth, onOpenPayment }: { isOpen: boolean, onClose: () => void, category: string, packages: Package[], user: User | null, onOrderSuccess: () => void, onOpenAuth: () => void, onOpenPayment: (amount: number, pkg: Package, uid: string) => void }) => {
+const TrackOrderModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
+  const [query, setQuery] = useState('');
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
+
+  const handleTrack = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!query) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/orders/track/${encodeURIComponent(query)}`);
+      const data = await res.json();
+      setOrders(data);
+      setSearched(true);
+    } catch (e) {
+      alert("Error tracking order");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleString('en-GB', { timeZone: 'Asia/Dhaka' });
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <motion.div 
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="bg-zinc-900 border border-zinc-800 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl"
+      >
+        <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <Search className="w-5 h-5 text-emerald-500" /> Track Order (অর্ডার স্ট্যাটাস)
+          </h2>
+          <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-full text-zinc-400"><X className="w-6 h-6" /></button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <form onSubmit={handleTrack} className="flex gap-2">
+            <input 
+              type="text" 
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Order ID (#CVV...) বা কন্টাক্ট নম্বর দিন"
+              className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors"
+            />
+            <button 
+              type="submit"
+              disabled={loading}
+              className="px-6 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl transition-all disabled:opacity-50"
+            >
+              Search
+            </button>
+          </form>
+
+          <div className="max-h-[50vh] overflow-y-auto space-y-4">
+            {loading ? (
+              <div className="text-center py-8 text-zinc-500">Searching...</div>
+            ) : searched && orders.length === 0 ? (
+              <div className="text-center py-8 text-zinc-500">কোনো অর্ডার পাওয়া যায়নি।</div>
+            ) : (
+              orders.map(order => (
+                <div key={order.id} className="bg-zinc-800/50 border border-zinc-700 p-4 rounded-2xl">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="text-white font-bold">{order.package_name}</div>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase font-bold ${order.status === 'complete' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                      {order.status}
+                    </span>
+                  </div>
+                  <div className="text-zinc-500 text-xs space-y-1">
+                    <div>Order ID: <span className="text-zinc-300">{order.order_id_string}</span></div>
+                    <div>UID: <span className="text-zinc-300">{order.player_uid}</span></div>
+                    <div>Date: <span className="text-zinc-300">{formatDate(order.created_at)}</span></div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+const OrderModal = ({ isOpen, onClose, category, packages, user, onOrderSuccess, onOpenAuth, onOpenPayment }: { isOpen: boolean, onClose: () => void, category: string, packages: Package[], user: User | null, onOrderSuccess: (orderIdString?: string) => void, onOpenAuth: () => void, onOpenPayment: (amount: number, pkg: Package, uid: string) => void }) => {
   const [selectedPkg, setSelectedPkg] = useState<Package | null>(null);
   const [uid, setUid] = useState('');
   const [gameName, setGameName] = useState('');
@@ -504,20 +623,13 @@ const OrderModal = ({ isOpen, onClose, category, packages, user, onOrderSuccess,
       return;
     }
 
-    if (!user) {
-      // Save intent to localStorage before redirecting to login
-      localStorage.setItem('pending_uid', uid);
-      localStorage.setItem('pending_pkg_id', selectedPkg.id.toString());
-      onOpenAuth();
-      return;
-    }
-    
-    // Clear pending data once logged in and proceeding
-    localStorage.removeItem('pending_uid');
-    localStorage.removeItem('pending_pkg_id');
-
     if (paymentMethod === 'instant') {
       onOpenPayment(selectedPkg.price, selectedPkg, uid);
+      return;
+    }
+
+    if (!user) {
+      setError("ওয়ালেট পেমেন্টের জন্য লগ-ইন করা প্রয়োজন। দয়া করে লগ-ইন করুন অথবা Instant Pay সিলেক্ট করুন।");
       return;
     }
 
@@ -535,9 +647,8 @@ const OrderModal = ({ isOpen, onClose, category, packages, user, onOrderSuccess,
       });
       const data = await res.json();
       if (data.success) {
-        onOrderSuccess();
+        onOrderSuccess(data.order_id_string);
         onClose();
-        alert("অর্ডারটি সফলভাবে গ্রহণ করা হয়েছে!");
       } else {
         setError(data.message);
       }
@@ -687,14 +798,14 @@ const OrderModal = ({ isOpen, onClose, category, packages, user, onOrderSuccess,
           {/* 4. Summary & Action */}
           <section className="pt-4 border-t border-zinc-800">
             <div className="bg-zinc-800/30 p-4 rounded-2xl mb-6">
-              <div className="flex items-center gap-2 text-zinc-300 text-sm mb-2">
+                <div className="flex items-center gap-2 text-zinc-300 text-sm mb-2">
                 <Bell className="w-4 h-4 text-emerald-500" />
                 <span>ⓘ প্রোডাক্টটি কিনতে আপনার প্রয়োজন <span className="text-emerald-400 font-bold">৳{selectedPkg?.price || 0}</span> টাকা।</span>
               </div>
-              {!user && (
+              {!user && paymentMethod === 'wallet' && (
                 <div className="flex items-center gap-2 text-amber-400 text-sm font-medium">
                   <X className="w-4 h-4" />
-                  <span>ⓘ Please Login To Purchase</span>
+                  <span>ⓘ Wallet Pay requires Login</span>
                 </div>
               )}
             </div>
@@ -704,9 +815,9 @@ const OrderModal = ({ isOpen, onClose, category, packages, user, onOrderSuccess,
             <button 
               onClick={handleOrder}
               disabled={loading || !isNameConfirmed}
-              className={`w-full py-4 font-black text-xl rounded-2xl transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${user ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20 text-white' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20 text-white'}`}
+              className={`w-full py-4 font-black text-xl rounded-2xl transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20 text-white`}
             >
-              {loading ? 'Processing...' : (user ? 'BUY NOW' : 'LOGIN')}
+              {loading ? 'Processing...' : 'BUY NOW'}
             </button>
           </section>
         </div>
@@ -904,12 +1015,11 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }: { isOpen: boolean, onClos
             <div className="relative flex justify-center text-xs uppercase"><span className="bg-zinc-900 px-4 text-zinc-500 font-bold tracking-widest">Or Continue With</span></div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="space-y-4">
             <button 
               onClick={() => handleSocialLogin('google')}
               disabled={isLoading}
-              title="One-Tap Login with Google"
-              className="flex items-center justify-center py-3 bg-white hover:bg-zinc-100 rounded-xl transition-all group disabled:opacity-50 relative overflow-hidden"
+              className="w-full flex items-center justify-center gap-3 py-3 bg-white hover:bg-zinc-100 text-zinc-900 font-bold rounded-xl transition-all disabled:opacity-50"
             >
               <svg className="w-6 h-6" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -917,27 +1027,33 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }: { isOpen: boolean, onClos
                 <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
               </svg>
+              <span>Sign in with Google</span>
             </button>
-            <button 
-              onClick={() => handleSocialLogin('facebook')}
-              disabled={isLoading}
-              title="One-Tap Login with Facebook"
-              className="flex items-center justify-center py-3 bg-[#1877F2] hover:bg-[#166fe5] rounded-xl transition-all disabled:opacity-50"
-            >
-              <svg className="w-6 h-6 fill-white" viewBox="0 0 24 24">
-                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-              </svg>
-            </button>
-            <button 
-              onClick={() => handleSocialLogin('twitter')}
-              disabled={isLoading}
-              title="One-Tap Login with Twitter"
-              className="flex items-center justify-center py-3 bg-black hover:bg-zinc-900 rounded-xl transition-all disabled:opacity-50"
-            >
-              <svg className="w-5 h-5 fill-white" viewBox="0 0 24 24">
-                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-              </svg>
-            </button>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <button 
+                onClick={() => handleSocialLogin('facebook')}
+                disabled={isLoading}
+                title="One-Tap Login with Facebook"
+                className="flex items-center justify-center gap-2 py-3 bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold rounded-xl transition-all disabled:opacity-50"
+              >
+                <svg className="w-5 h-5 fill-white" viewBox="0 0 24 24">
+                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                </svg>
+                <span>Facebook</span>
+              </button>
+              <button 
+                onClick={() => handleSocialLogin('twitter')}
+                disabled={isLoading}
+                title="One-Tap Login with Twitter"
+                className="flex items-center justify-center gap-2 py-3 bg-black hover:bg-zinc-900 text-white font-bold rounded-xl transition-all disabled:opacity-50"
+              >
+                <svg className="w-4 h-4 fill-white" viewBox="0 0 24 24">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
+                <span>Twitter</span>
+              </button>
+            </div>
           </div>
         </div>
       </motion.div>
@@ -945,15 +1061,44 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }: { isOpen: boolean, onClos
   );
 };
 
-const Dashboard = ({ user, isOpen, onClose }: { user: User, isOpen: boolean, onClose: () => void }) => {
+const Dashboard = ({ user, isOpen, onClose }: { user: User | null, isOpen: boolean, onClose: () => void }) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [activeTab, setActiveTab] = useState<'history' | 'wallet' | 'profile'>('history');
 
   useEffect(() => {
-    if (isOpen) {
-      fetch(`/api/orders/${user.id}`).then(res => res.json()).then(setOrders);
-    }
-  }, [isOpen, user.id]);
+    const fetchOrders = async () => {
+      if (isOpen) {
+        let allOrders: Order[] = [];
+        if (user) {
+          const userOrdersRes = await fetch(`/api/orders/${user.id}`);
+          allOrders = await userOrdersRes.json();
+        }
+        
+        const guestOrderIds = JSON.parse(localStorage.getItem('guest_orders') || '[]');
+        
+        if (guestOrderIds.length > 0) {
+          const guestOrdersRes = await fetch('/api/orders/guest-history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderIds: guestOrderIds })
+          });
+          const guestOrders = await guestOrdersRes.json();
+          
+          // Merge and remove duplicates (by id)
+          const orderMap = new Map();
+          allOrders.forEach(o => orderMap.set(o.id, o));
+          guestOrders.forEach((o: Order) => orderMap.set(o.id, o));
+          allOrders = Array.from(orderMap.values());
+          
+          // Sort by date descending
+          allOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        }
+        
+        setOrders(allOrders);
+      }
+    };
+    fetchOrders();
+  }, [isOpen, user?.id]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -994,21 +1139,27 @@ const Dashboard = ({ user, isOpen, onClose }: { user: User, isOpen: boolean, onC
       >
         <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {user.profile_pic ? (
-              <img 
-                src={user.profile_pic} 
-                alt={user.name} 
-                className="w-12 h-12 rounded-full border border-zinc-700 object-cover"
-                referrerPolicy="no-referrer"
-              />
+            {user ? (
+              user.profile_pic ? (
+                <img 
+                  src={user.profile_pic} 
+                  alt={user.name} 
+                  className="w-12 h-12 rounded-full border border-zinc-700 object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center text-white font-black text-xl">
+                  {user.name[0]}
+                </div>
+              )
             ) : (
-              <div className="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center text-white font-black text-xl">
-                {user.name[0]}
+              <div className="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center border border-zinc-700">
+                <User className="w-6 h-6 text-zinc-500" />
               </div>
             )}
             <div>
-              <h2 className="text-lg font-bold text-white leading-tight">{user.name}</h2>
-              <p className="text-zinc-500 text-sm">{user.email}</p>
+              <h2 className="text-lg font-bold text-white leading-tight">{user ? user.name : 'Guest User'}</h2>
+              <p className="text-zinc-500 text-sm">{user ? user.email : 'No account connected'}</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-full text-zinc-400"><X /></button>
@@ -1021,21 +1172,46 @@ const Dashboard = ({ user, isOpen, onClose }: { user: User, isOpen: boolean, onC
           >
             Orders
           </button>
-          <button 
-            onClick={() => setActiveTab('wallet')}
-            className={`flex-1 py-4 text-sm font-bold uppercase tracking-wider transition-all ${activeTab === 'wallet' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-zinc-500'}`}
-          >
-            Wallet
-          </button>
-          <button 
-            onClick={() => setActiveTab('profile')}
-            className={`flex-1 py-4 text-sm font-bold uppercase tracking-wider transition-all ${activeTab === 'profile' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-zinc-500'}`}
-          >
-            Profile
-          </button>
+          {user && (
+            <>
+              <button 
+                onClick={() => setActiveTab('wallet')}
+                className={`flex-1 py-4 text-sm font-bold uppercase tracking-wider transition-all ${activeTab === 'wallet' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-zinc-500'}`}
+              >
+                Wallet
+              </button>
+              <button 
+                onClick={() => setActiveTab('profile')}
+                className={`flex-1 py-4 text-sm font-bold uppercase tracking-wider transition-all ${activeTab === 'profile' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-zinc-500'}`}
+              >
+                Profile
+              </button>
+            </>
+          )}
           {activeTab === 'history' && (
             <button 
-              onClick={() => fetch(`/api/orders/${user.id}`).then(res => res.json()).then(setOrders)}
+              onClick={async () => {
+                let allOrders: Order[] = [];
+                if (user) {
+                  const userOrdersRes = await fetch(`/api/orders/${user.id}`);
+                  allOrders = await userOrdersRes.json();
+                }
+                const guestOrderIds = JSON.parse(localStorage.getItem('guest_orders') || '[]');
+                if (guestOrderIds.length > 0) {
+                  const guestOrdersRes = await fetch('/api/orders/guest-history', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ orderIds: guestOrderIds })
+                  });
+                  const guestOrders = await guestOrdersRes.json();
+                  const orderMap = new Map();
+                  allOrders.forEach(o => orderMap.set(o.id, o));
+                  guestOrders.forEach((o: Order) => orderMap.set(o.id, o));
+                  allOrders = Array.from(orderMap.values());
+                  allOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                }
+                setOrders(allOrders);
+              }}
               className="p-2 hover:bg-zinc-800 rounded-full text-zinc-500 hover:text-emerald-500 transition-colors"
               title="Refresh Orders"
             >
@@ -1129,6 +1305,7 @@ export default function App() {
   const [packages, setPackages] = useState<Package[]>([]);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
+  const [isTrackOpen, setIsTrackOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showPopup, setShowPopup] = useState(true);
   const [paymentData, setPaymentData] = useState<{ isOpen: boolean, amount: number, pkg?: Package, uid?: string }>({ isOpen: false, amount: 0 });
@@ -1151,7 +1328,14 @@ export default function App() {
     localStorage.removeItem('user');
   };
 
-  const refreshUser = async () => {
+  const refreshUser = async (orderIdString?: string) => {
+    if (orderIdString) {
+      const guestOrders = JSON.parse(localStorage.getItem('guest_orders') || '[]');
+      guestOrders.push(orderIdString);
+      localStorage.setItem('guest_orders', JSON.stringify(guestOrders));
+      alert(`অর্ডারটি সফলভাবে গ্রহণ করা হয়েছে! আপনার অর্ডার আইডি: ${orderIdString}। এটি কপি করে রাখুন।`);
+    }
+
     if (user) {
       const res = await fetch(`/api/user/${user.id}`);
       const data = await res.json();
@@ -1160,24 +1344,25 @@ export default function App() {
     }
   };
 
-  const handleVerifyPayment = async (trxId: string) => {
-    if (!user || !manualPayment.pkg || !manualPayment.uid) return;
+  const handleVerifyPayment = async (trxId: string, contact: string) => {
+    if (!manualPayment.pkg || !manualPayment.uid) return;
 
     try {
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          user_id: user.id, 
+          user_id: user?.id, 
           package_id: manualPayment.pkg.id, 
           player_uid: manualPayment.uid,
           payment_method: manualPayment.method,
-          transaction_id: trxId
+          transaction_id: trxId,
+          contact_number: contact
         })
       });
       const data = await res.json();
       if (data.success) {
-        alert(`আপনার ট্রান্সেকশন আইডি (${trxId}) জমা দেওয়া হয়েছে। অ্যাডমিন চেক করে আপনার অর্ডারটি কনফার্ম করবেন। ধন্যবাদ!`);
+        refreshUser(data.order_id_string);
         setManualPayment({ ...manualPayment, isOpen: false });
         setPaymentData({ ...paymentData, isOpen: false });
         setSelectedCategory(null);
@@ -1196,6 +1381,7 @@ export default function App() {
         onLogout={handleLogout} 
         onOpenAuth={() => setIsAuthOpen(true)} 
         onOpenDashboard={() => setIsDashboardOpen(true)}
+        onOpenTrack={() => setIsTrackOpen(true)}
       />
       
       <ScrollingNotice />
@@ -1300,13 +1486,24 @@ export default function App() {
         onAuthSuccess={handleAuthSuccess}
       />
       
-      {user && (
+      {user ? (
         <Dashboard 
           user={user} 
           isOpen={isDashboardOpen} 
           onClose={() => setIsDashboardOpen(false)} 
         />
+      ) : (
+        <Dashboard 
+          user={null} 
+          isOpen={isDashboardOpen} 
+          onClose={() => setIsDashboardOpen(false)} 
+        />
       )}
+
+      <TrackOrderModal 
+        isOpen={isTrackOpen}
+        onClose={() => setIsTrackOpen(false)}
+      />
 
       <OrderModal 
         isOpen={!!selectedCategory} 
