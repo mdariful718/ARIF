@@ -35,6 +35,7 @@ interface User {
   email: string;
   wallet_balance: number;
   role: string;
+  profile_pic?: string;
 }
 
 interface Order {
@@ -110,9 +111,20 @@ const Header = ({ user, onLogout, onOpenAuth, onOpenDashboard }: { user: User | 
               </div>
               <button 
                 onClick={onOpenDashboard}
-                className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-300"
+                className="p-1 hover:bg-zinc-800 rounded-full transition-colors text-zinc-300 flex items-center gap-2"
               >
-                <User className="w-5 h-5" />
+                {user.profile_pic ? (
+                  <img 
+                    src={user.profile_pic} 
+                    alt={user.name} 
+                    className="w-8 h-8 rounded-full border border-zinc-700 object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="w-8 h-8 bg-zinc-800 rounded-full flex items-center justify-center border border-zinc-700">
+                    <User className="w-4 h-4" />
+                  </div>
+                )}
               </button>
               <button 
                 onClick={onLogout}
@@ -707,9 +719,12 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }: { isOpen: boolean, onClos
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({ name: '', email: '', password: '' });
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsLoading(true);
+    setError('');
     const endpoint = isLogin ? '/api/login' : '/api/register';
     try {
       const res = await fetch(endpoint, {
@@ -731,6 +746,57 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }: { isOpen: boolean, onClos
       }
     } catch (e) {
       setError("Something went wrong");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSocialLogin = async (provider: 'google' | 'facebook' | 'twitter') => {
+    setIsLoading(true);
+    setError('');
+    
+    // Simulate OAuth data fetching
+    const mockData = {
+      google: {
+        name: 'Sohag Miah',
+        email: 'mdsohagmiah783@gmail.com',
+        provider: 'google',
+        provider_id: 'google_123456789',
+        profile_pic: 'https://picsum.photos/seed/sohag/200'
+      },
+      facebook: {
+        name: 'Sohag Facebook',
+        email: 'sohag.fb@example.com',
+        provider: 'facebook',
+        provider_id: 'fb_987654321',
+        profile_pic: 'https://picsum.photos/seed/fb/200'
+      },
+      twitter: {
+        name: 'Sohag Twitter',
+        email: 'sohag.tw@example.com',
+        provider: 'twitter',
+        provider_id: 'tw_456789123',
+        profile_pic: 'https://picsum.photos/seed/tw/200'
+      }
+    };
+
+    try {
+      const response = await fetch('/api/auth/social', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(mockData[provider])
+      });
+      const data = await response.json();
+      if (data.success) {
+        onAuthSuccess(data.user);
+        onClose();
+      } else {
+        setError('Social login failed. Please try again.');
+      }
+    } catch (err) {
+      setError('Connection error. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -805,8 +871,10 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }: { isOpen: boolean, onClos
 
           <div className="grid grid-cols-3 gap-4">
             <button 
-              onClick={() => alert('গুগল লগ-ইন ফিচারটি কনফিগার করা প্রয়োজন।')}
-              className="flex items-center justify-center py-3 bg-white hover:bg-zinc-100 rounded-xl transition-all group"
+              onClick={() => handleSocialLogin('google')}
+              disabled={isLoading}
+              title="One-Tap Login with Google"
+              className="flex items-center justify-center py-3 bg-white hover:bg-zinc-100 rounded-xl transition-all group disabled:opacity-50 relative overflow-hidden"
             >
               <svg className="w-6 h-6" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -816,16 +884,20 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }: { isOpen: boolean, onClos
               </svg>
             </button>
             <button 
-              onClick={() => alert('ফেসবুক লগ-ইন ফিচারটি কনফিগার করা প্রয়োজন।')}
-              className="flex items-center justify-center py-3 bg-[#1877F2] hover:bg-[#166fe5] rounded-xl transition-all"
+              onClick={() => handleSocialLogin('facebook')}
+              disabled={isLoading}
+              title="One-Tap Login with Facebook"
+              className="flex items-center justify-center py-3 bg-[#1877F2] hover:bg-[#166fe5] rounded-xl transition-all disabled:opacity-50"
             >
               <svg className="w-6 h-6 fill-white" viewBox="0 0 24 24">
                 <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
               </svg>
             </button>
             <button 
-              onClick={() => alert('টুইটার লগ-ইন ফিচারটি কনফিগার করা প্রয়োজন।')}
-              className="flex items-center justify-center py-3 bg-black hover:bg-zinc-900 rounded-xl transition-all"
+              onClick={() => handleSocialLogin('twitter')}
+              disabled={isLoading}
+              title="One-Tap Login with Twitter"
+              className="flex items-center justify-center py-3 bg-black hover:bg-zinc-900 rounded-xl transition-all disabled:opacity-50"
             >
               <svg className="w-5 h-5 fill-white" viewBox="0 0 24 24">
                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
@@ -887,9 +959,18 @@ const Dashboard = ({ user, isOpen, onClose }: { user: User, isOpen: boolean, onC
       >
         <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center text-white font-black text-xl">
-              {user.name[0]}
-            </div>
+            {user.profile_pic ? (
+              <img 
+                src={user.profile_pic} 
+                alt={user.name} 
+                className="w-12 h-12 rounded-full border border-zinc-700 object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center text-white font-black text-xl">
+                {user.name[0]}
+              </div>
+            )}
             <div>
               <h2 className="text-lg font-bold text-white leading-tight">{user.name}</h2>
               <p className="text-zinc-500 text-sm">{user.email}</p>

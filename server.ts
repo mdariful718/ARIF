@@ -19,7 +19,8 @@ db.exec(`
     wallet_balance REAL DEFAULT 0,
     role TEXT DEFAULT 'user',
     provider TEXT DEFAULT 'local',
-    provider_id TEXT
+    provider_id TEXT,
+    profile_pic TEXT
   );
 
   CREATE TABLE IF NOT EXISTS packages (
@@ -54,6 +55,10 @@ db.exec(`
   try {
     db.prepare("ALTER TABLE users ADD COLUMN provider TEXT DEFAULT 'local'").run();
     db.prepare("ALTER TABLE users ADD COLUMN provider_id TEXT").run();
+  } catch (e) {}
+
+  try {
+    db.prepare("ALTER TABLE users ADD COLUMN profile_pic TEXT").run();
   } catch (e) {}
 
   // Add completed_at column if it doesn't exist
@@ -170,6 +175,42 @@ async function startServer() {
     } catch (e) {
       res.status(400).json({ success: false, message: "Email already exists" });
     }
+  });
+
+  app.post("/api/auth/social", (req, res) => {
+    const { name, email, provider, provider_id, profile_pic } = req.body;
+    
+    // Check if user exists with this provider_id
+    let user = db.prepare("SELECT * FROM users WHERE provider = ? AND provider_id = ?").get(provider, provider_id) as any;
+    
+    if (!user) {
+      // Check if user exists with this email (Account Linking)
+      user = db.prepare("SELECT * FROM users WHERE email = ?").get(email) as any;
+      
+      if (user) {
+        // Link existing account
+        db.prepare("UPDATE users SET provider = ?, provider_id = ?, profile_pic = ? WHERE id = ?")
+          .run(provider, provider_id, profile_pic, user.id);
+        user = db.prepare("SELECT * FROM users WHERE id = ?").get(user.id) as any;
+      } else {
+        // Create new account
+        const info = db.prepare("INSERT INTO users (name, email, provider, provider_id, profile_pic, wallet_balance) VALUES (?, ?, ?, ?, ?, 0)")
+          .run(name, email, provider, provider_id, profile_pic);
+        user = db.prepare("SELECT * FROM users WHERE id = ?").get(info.lastInsertRowid) as any;
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      user: { 
+        id: user.id, 
+        name: user.name, 
+        email: user.email, 
+        wallet_balance: user.wallet_balance, 
+        role: user.role,
+        profile_pic: user.profile_pic
+      } 
+    });
   });
 
   app.get("/api/user/:id", (req, res) => {
