@@ -721,6 +721,22 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }: { isOpen: boolean, onClos
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      // Validate origin is from AI Studio preview or localhost
+      const origin = event.origin;
+      if (!origin.endsWith('.run.app') && !origin.includes('localhost')) {
+        return;
+      }
+      if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
+        onAuthSuccess(event.data.user);
+        onClose();
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [onAuthSuccess, onClose]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -755,43 +771,23 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }: { isOpen: boolean, onClos
     setIsLoading(true);
     setError('');
     
-    // Simulate OAuth data fetching
-    const mockData = {
-      google: {
-        name: 'Sohag Miah',
-        email: 'mdsohagmiah783@gmail.com',
-        provider: 'google',
-        provider_id: 'google_123456789',
-        profile_pic: 'https://picsum.photos/seed/sohag/200'
-      },
-      facebook: {
-        name: 'Sohag Facebook',
-        email: 'sohag.fb@example.com',
-        provider: 'facebook',
-        provider_id: 'fb_987654321',
-        profile_pic: 'https://picsum.photos/seed/fb/200'
-      },
-      twitter: {
-        name: 'Sohag Twitter',
-        email: 'sohag.tw@example.com',
-        provider: 'twitter',
-        provider_id: 'tw_456789123',
-        profile_pic: 'https://picsum.photos/seed/tw/200'
-      }
-    };
-
     try {
-      const response = await fetch('/api/auth/social', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(mockData[provider])
-      });
-      const data = await response.json();
-      if (data.success) {
-        onAuthSuccess(data.user);
-        onClose();
-      } else {
-        setError('Social login failed. Please try again.');
+      // 1. Fetch the OAuth URL from your server
+      const response = await fetch(`/api/auth/url/${provider}`);
+      if (!response.ok) {
+        throw new Error('Failed to get auth URL');
+      }
+      const { url } = await response.json();
+
+      // 2. Open the OAuth PROVIDER's URL directly in popup
+      const authWindow = window.open(
+        url,
+        'oauth_popup',
+        'width=600,height=700'
+      );
+
+      if (!authWindow) {
+        setError('Please allow popups for this site to connect your account.');
       }
     } catch (err) {
       setError('Connection error. Please try again.');

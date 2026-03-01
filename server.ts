@@ -3,6 +3,10 @@ import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
+import axios from "axios";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -179,7 +183,11 @@ async function startServer() {
 
   app.post("/api/auth/social", (req, res) => {
     const { name, email, provider, provider_id, profile_pic } = req.body;
-    
+    const user = handleSocialAuth(name, email, provider, provider_id, profile_pic);
+    res.json({ success: true, user });
+  });
+
+  function handleSocialAuth(name: string, email: string, provider: string, provider_id: string, profile_pic: string) {
     // Check if user exists with this provider_id
     let user = db.prepare("SELECT * FROM users WHERE provider = ? AND provider_id = ?").get(provider, provider_id) as any;
     
@@ -200,17 +208,155 @@ async function startServer() {
       }
     }
 
-    res.json({ 
-      success: true, 
-      user: { 
-        id: user.id, 
-        name: user.name, 
-        email: user.email, 
-        wallet_balance: user.wallet_balance, 
-        role: user.role,
-        profile_pic: user.profile_pic
-      } 
-    });
+    return { 
+      id: user.id, 
+      name: user.name, 
+      email: user.email, 
+      wallet_balance: user.wallet_balance, 
+      role: user.role,
+      profile_pic: user.profile_pic
+    };
+  }
+
+  // OAuth Routes
+  app.get("/api/auth/url/:provider", (req, res) => {
+    const { provider } = req.params;
+    const redirectUri = `${process.env.APP_URL || 'http://localhost:3000'}/auth/callback`;
+    let authUrl = "";
+
+    if (provider === "google") {
+      const params = new URLSearchParams({
+        client_id: process.env.GOOGLE_CLIENT_ID!,
+        redirect_uri: redirectUri,
+        response_type: "code",
+        scope: "openid email profile",
+        state: "google"
+      });
+      authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+    } else if (provider === "facebook") {
+      const params = new URLSearchParams({
+        client_id: process.env.FACEBOOK_APP_ID!,
+        redirect_uri: redirectUri,
+        response_type: "code",
+        scope: "email,public_profile",
+        state: "facebook"
+      });
+      authUrl = `https://www.facebook.com/v12.0/dialog/oauth?${params}`;
+    } else if (provider === "twitter") {
+      const params = new URLSearchParams({
+        client_id: process.env.TWITTER_CLIENT_ID!,
+        redirect_uri: redirectUri,
+        response_type: "code",
+        scope: "users.read tweet.read",
+        state: "twitter",
+        code_challenge: "challenge", // Simplified for demo, should be dynamic PKCE
+        code_challenge_method: "plain"
+      });
+      authUrl = `https://twitter.com/i/oauth2/authorize?${params}`;
+    }
+
+    res.json({ url: authUrl });
+  });
+
+  app.get("/auth/callback", async (req, res) => {
+    const { code, state } = req.query;
+    const redirectUri = `${process.env.APP_URL || 'http://localhost:3000'}/auth/callback`;
+    let userData: any = null;
+
+    try {
+      if (state === "google") {
+        const tokenRes = await axios.post("https://oauth2.googleapis.com/token", {
+          code,
+          client_id: process.env.GOOGLE_CLIENT_ID,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET,
+          redirect_uri: redirectUri,
+          grant_type: "authorization_code"
+        });
+        const userRes = await axios.get("https://www.googleapis.com/oauth2/v2/userinfo", {
+          headers: { Authorization: `Bearer ${tokenRes.data.access_token}` }
+        });
+        userData = {
+          name: userRes.data.name,
+          email: userRes.data.email,
+          provider: "google",
+          provider_id: userRes.data.id,
+          profile_pic: userRes.data.picture
+        };
+      } else if (state === "facebook") {
+        const tokenRes = await axios.get("https://graph.facebook.com/v12.0/oauth/access_token", {
+          params: {
+            client_id: process.env.FACEBOOK_APP_ID,
+            client_secret: process.env.FACEBOOK_APP_SECRET,
+            redirect_uri: redirectUri,
+            code
+          }
+        });
+        const userRes = await axios.get("https://graph.facebook.com/me", {
+          params: {
+            fields: "id,name,email,picture.type(large)",
+            access_token: tokenRes.data.access_token
+          }
+        });
+        userData = {
+          name: userRes.data.name,
+          email: userRes.data.email,
+          provider: "facebook",
+          provider_id: userRes.data.id,
+          profile_pic: userRes.data.picture?.data?.url
+        };
+      } else if (state === "twitter") {
+        const tokenRes = await axios.post("https://api.twitter.com/2/oauth2/token", 
+          new URLSearchParams({
+            code: code as string,
+            grant_type: "authorization_code",
+            client_id: process.env.TWITTER_CLIENT_ID!,
+            redirect_uri: redirectUri,
+            code_verifier: "challenge"
+          }).toString(),
+          {
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+              Authorization: `Basic ${Buffer.from(`${process.env.TWITTER_CLIENT_ID}:${process.env.TWITTER_CLIENT_SECRET}`).toString("base64")}`
+            }
+          }
+        );
+        const userRes = await axios.get("https://api.twitter.com/2/users/me", {
+          params: { "user.fields": "profile_image_url" },
+          headers: { Authorization: `Bearer ${tokenRes.data.access_token}` }
+        });
+        userData = {
+          name: userRes.data.data.name,
+          email: userRes.data.data.username + "@twitter.com", // Twitter doesn't always provide email
+          provider: "twitter",
+          provider_id: userRes.data.data.id,
+          profile_pic: userRes.data.data.profile_image_url
+        };
+      }
+
+      if (userData) {
+        const user = handleSocialAuth(userData.name, userData.email, userData.provider, userData.provider_id, userData.profile_pic);
+        res.send(`
+          <html>
+            <body>
+              <script>
+                if (window.opener) {
+                  window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS', user: ${JSON.stringify(user)} }, '*');
+                  window.close();
+                } else {
+                  window.location.href = '/';
+                }
+              </script>
+              <p>Authentication successful. This window should close automatically.</p>
+            </body>
+          </html>
+        `);
+      } else {
+        res.status(400).send("Authentication failed");
+      }
+    } catch (error: any) {
+      console.error("OAuth Error:", error.response?.data || error.message);
+      res.status(500).send("Internal Server Error during authentication");
+    }
   });
 
   app.get("/api/user/:id", (req, res) => {
