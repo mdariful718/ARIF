@@ -174,10 +174,20 @@ async function startServer() {
   app.post("/api/register", (req, res) => {
     const { name, email, password } = req.body;
     try {
-      const info = db.prepare("INSERT INTO users (name, email, password) VALUES (?, ?, ?)").run(name, email, password);
-      res.json({ success: true, userId: info.lastInsertRowid });
+      const info = db.prepare("INSERT INTO users (name, email, password, wallet_balance) VALUES (?, ?, ?, 0)").run(name, email, password);
+      const user = db.prepare("SELECT * FROM users WHERE id = ?").get(info.lastInsertRowid) as any;
+      res.json({ 
+        success: true, 
+        user: { 
+          id: user.id, 
+          name: user.name, 
+          email: user.email, 
+          wallet_balance: user.wallet_balance, 
+          role: user.role 
+        } 
+      });
     } catch (e) {
-      res.status(400).json({ success: false, message: "Email already exists" });
+      res.status(400).json({ success: false, message: "এই ইমেইল দিয়ে আগে থেকেই অ্যাকাউন্ট আছে, দয়া করে লগ-ইন করুন" });
     }
   });
 

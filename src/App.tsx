@@ -717,7 +717,7 @@ const OrderModal = ({ isOpen, onClose, category, packages, user, onOrderSuccess,
 
 const AuthModal = ({ isOpen, onClose, onAuthSuccess }: { isOpen: boolean, onClose: () => void, onAuthSuccess: (user: User) => void }) => {
   const [isLogin, setIsLogin] = useState(true);
-  const [formData, setFormData] = useState({ name: '', email: '', password: '' });
+  const [formData, setFormData] = useState({ name: '', email: '', password: '', confirmPassword: '' });
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -737,10 +737,35 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }: { isOpen: boolean, onClos
     return () => window.removeEventListener('message', handleMessage);
   }, [onAuthSuccess, onClose]);
 
+  const validateEmail = (email: string) => {
+    return String(email)
+      .toLowerCase()
+      .match(
+        /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
+      );
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
     setError('');
+
+    // Validations for Registration
+    if (!isLogin) {
+      if (!validateEmail(formData.email)) {
+        setError("দয়া করে একটি সঠিক ইমেইল অ্যাড্রেস দিন (যেমন- name@gmail.com)");
+        return;
+      }
+      if (formData.password.length < 8 || formData.password.length > 16) {
+        setError("পাসওয়ার্ড অবশ্যই ৮ থেকে ১৬ অক্ষরের মধ্যে হতে হবে।");
+        return;
+      }
+      if (formData.password !== formData.confirmPassword) {
+        setError("পাসওয়ার্ড মিলেনি");
+        return;
+      }
+    }
+
+    setIsLoading(true);
     const endpoint = isLogin ? '/api/login' : '/api/register';
     try {
       const res = await fetch(endpoint, {
@@ -750,18 +775,13 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }: { isOpen: boolean, onClos
       });
       const data = await res.json();
       if (data.success) {
-        if (isLogin) {
-          onAuthSuccess(data.user);
-          onClose();
-        } else {
-          setIsLogin(true);
-          alert("Registration successful! Please login.");
-        }
+        onAuthSuccess(data.user);
+        onClose();
       } else {
         setError(data.message);
       }
     } catch (e) {
-      setError("Something went wrong");
+      setError("সিস্টেমে সমস্যা হচ্ছে, দয়া করে আবার চেষ্টা করুন।");
     } finally {
       setIsLoading(false);
     }
@@ -806,17 +826,18 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }: { isOpen: boolean, onClos
         className="bg-zinc-900 border border-zinc-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl p-8"
       >
         <div className="flex justify-between items-center mb-8">
-          <h2 className="text-2xl font-black text-white uppercase tracking-tighter">{isLogin ? 'Login' : 'Register'}</h2>
+          <h2 className="text-2xl font-black text-white uppercase tracking-tighter">{isLogin ? 'Login' : 'Registration'}</h2>
           <button onClick={onClose} className="text-zinc-500 hover:text-white"><X /></button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {!isLogin && (
             <div>
-              <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Full Name</label>
+              <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Full Name (ফুল নেম)</label>
               <input 
                 type="text" 
                 required
+                placeholder="আপনার পুরো নাম লিখুন"
                 className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
                 value={formData.name}
                 onChange={e => setFormData({...formData, name: e.target.value})}
@@ -824,28 +845,46 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }: { isOpen: boolean, onClos
             </div>
           )}
           <div>
-            <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Email Address</label>
+            <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Email Address (ইমেইল অ্যাড্রেস)</label>
             <input 
               type="email" 
               required
+              placeholder="name@gmail.com"
               className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
               value={formData.email}
               onChange={e => setFormData({...formData, email: e.target.value})}
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Password</label>
+            <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Password (পাসওয়ার্ড)</label>
             <input 
               type="password" 
               required
+              placeholder="৮-১৬ অক্ষরের পাসওয়ার্ড"
               className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
               value={formData.password}
               onChange={e => setFormData({...formData, password: e.target.value})}
             />
           </div>
-          {error && <p className="text-red-500 text-sm">{error}</p>}
-          <button className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-xl transition-all shadow-lg shadow-emerald-500/20">
-            {isLogin ? 'LOG IN' : 'CREATE ACCOUNT'}
+          {!isLogin && (
+            <div>
+              <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Verify Password (ভেরিফাই পাসওয়ার্ড)</label>
+              <input 
+                type="password" 
+                required
+                placeholder="আবার পাসওয়ার্ডটি লিখুন"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
+                value={formData.confirmPassword}
+                onChange={e => setFormData({...formData, confirmPassword: e.target.value})}
+              />
+            </div>
+          )}
+          {error && <p className="text-red-500 text-sm font-medium">{error}</p>}
+          <button 
+            disabled={isLoading}
+            className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-xl transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+          >
+            {isLoading ? 'প্রসেসিং হচ্ছে...' : (isLogin ? 'Login বাটন' : 'Create Account বাটন')}
           </button>
         </form>
 
