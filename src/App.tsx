@@ -672,7 +672,13 @@ const OrderModal = ({ isOpen, onClose, category, packages, user, onOrderSuccess,
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <ShoppingCart className="w-5 h-5 text-emerald-500" /> {category}
           </h2>
-          <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-full text-zinc-400"><X className="w-6 h-6" /></button>
+          <button 
+            onClick={onClose} 
+            className="p-2 hover:bg-red-500/10 hover:text-red-500 rounded-full text-zinc-400 transition-all group"
+            title="বন্ধ করুন"
+          >
+            <X className="w-6 h-6 group-hover:rotate-90 transition-transform duration-300" />
+          </button>
         </div>
         
         <div className="p-6 max-h-[80vh] overflow-y-auto space-y-8">
@@ -871,9 +877,15 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess, initialMode = 'login', init
 
     // Validations for Registration & Reset
     if (mode === 'register' || mode === 'reset') {
-      if (mode === 'register' && !validateEmail(formData.email)) {
-        setError("দয়া করে একটি সঠিক ইমেইল অ্যাড্রেস দিন (যেমন- name@gmail.com)");
-        return;
+      if (mode === 'register') {
+        if (!formData.name.trim()) {
+          setError("দয়া করে আপনার পুরো নাম লিখুন");
+          return;
+        }
+        if (!validateEmail(formData.email)) {
+          setError("দয়া করে একটি সঠিক ইমেইল অ্যাড্রেস দিন (যেমন- name@gmail.com)");
+          return;
+        }
       }
       if (formData.password.length < 8 || formData.password.length > 16) {
         setError("পাসওয়ার্ড অবশ্যই ৮ থেকে ১৬ অক্ষরের মধ্যে হতে হবে।");
@@ -894,7 +906,7 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess, initialMode = 'login', init
       body = { email: formData.email, password: formData.password };
     } else if (mode === 'register') {
       endpoint = '/api/register';
-      body = formData;
+      body = { name: formData.name, email: formData.email, password: formData.password };
     } else if (mode === 'forgot') {
       endpoint = '/api/auth/forgot-password';
       body = { email: formData.email };
@@ -963,6 +975,13 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess, initialMode = 'login', init
     }
   };
 
+  const handleClose = () => {
+    setFormData({ name: '', email: '', password: '', confirmPassword: '' });
+    setError('');
+    setSuccessMessage('');
+    onClose();
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -970,13 +989,20 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess, initialMode = 'login', init
       <motion.div 
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="bg-zinc-900 border border-zinc-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl p-8"
+        className="bg-zinc-900 border border-zinc-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl p-8 relative"
       >
+        <button 
+          onClick={handleClose} 
+          className="absolute top-4 right-4 p-2 rounded-full text-zinc-500 hover:text-red-500 hover:bg-red-500/10 transition-all z-10 group"
+          title="বন্ধ করুন"
+        >
+          <X className="w-6 h-6 group-hover:rotate-90 transition-transform duration-300" />
+        </button>
+
         <div className="flex justify-between items-center mb-8">
           <h2 className="text-2xl font-black text-white uppercase tracking-tighter">
             {mode === 'login' ? 'Login' : mode === 'register' ? 'Registration' : mode === 'forgot' ? 'Forgot Password' : 'Reset Password'}
           </h2>
-          <button onClick={onClose} className="text-zinc-500 hover:text-white"><X /></button>
         </div>
 
         {successMessage ? (
@@ -1065,15 +1091,30 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess, initialMode = 'login', init
               </div>
             )}
 
-            {error && <p className="text-red-500 text-sm font-medium">{error}</p>}
+            {error && (
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 text-red-500 text-sm font-medium"
+              >
+                <ShieldAlert className="w-4 h-4 shrink-0" />
+                {error}
+              </motion.div>
+            )}
             
             <button 
+              type="submit"
               disabled={isLoading}
-              className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-xl transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+              className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-xl transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {isLoading ? 'প্রসেসিং হচ্ছে...' : (
-                mode === 'login' ? 'Login বাটন' : 
-                mode === 'register' ? 'Create Account বাটন' : 
+              {isLoading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>{mode === 'register' ? 'অ্যাকাউন্ট তৈরি হচ্ছে...' : 'প্রসেসিং হচ্ছে...'}</span>
+                </>
+              ) : (
+                mode === 'login' ? 'Login' : 
+                mode === 'register' ? 'Create Account' : 
                 mode === 'forgot' ? 'Send Reset Link' : 'Reset Password'
               )}
             </button>
