@@ -31,7 +31,9 @@ db.exec(`
     role TEXT DEFAULT 'user',
     provider TEXT DEFAULT 'local',
     provider_id TEXT,
-    profile_pic TEXT
+    profile_pic TEXT,
+    reset_token TEXT,
+    reset_token_expiry DATETIME
   );
 
   CREATE TABLE IF NOT EXISTS packages (
@@ -70,6 +72,11 @@ db.exec(`
 
   try {
     db.prepare("ALTER TABLE users ADD COLUMN profile_pic TEXT").run();
+  } catch (e) {}
+
+  try {
+    db.prepare("ALTER TABLE users ADD COLUMN reset_token TEXT").run();
+    db.prepare("ALTER TABLE users ADD COLUMN reset_token_expiry DATETIME").run();
   } catch (e) {}
 
   // Add completed_at column if it doesn't exist
@@ -172,6 +179,42 @@ async function startServer() {
   app.get("/api/packages", (req, res) => {
     const packages = db.prepare("SELECT * FROM packages").all();
     res.json(packages);
+  });
+
+  app.post("/api/auth/forgot-password", (req, res) => {
+    const { email } = req.body;
+    const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email) as any;
+    
+    if (!user) {
+      return res.status(404).json({ success: false, message: "এই ইমেইল দিয়ে কোনো অ্যাকাউন্ট পাওয়া যায়নি" });
+    }
+
+    const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    const expiry = new Date(Date.now() + 3600000).toISOString(); // 1 hour from now
+
+    db.prepare("UPDATE users SET reset_token = ?, reset_token_expiry = ? WHERE id = ?").run(token, expiry, user.id);
+
+    // In a real app, you'd send an email here.
+    // For this demo, we'll return the token so the UI can show the reset form.
+    console.log(`Password reset link for ${email}: ${process.env.APP_URL}/reset-password?token=${token}`);
+    
+    res.json({ 
+      success: true, 
+      message: "পাসওয়ার্ড রিসেট লিংক আপনার ইমেইলে পাঠানো হয়েছে (ডেমো হিসেবে কনসোলে চেক করুন)",
+      debugToken: token // Only for demo purposes
+    });
+  });
+
+  app.post("/api/auth/reset-password", (req, res) => {
+    const { token, password } = req.body;
+    const user = db.prepare("SELECT * FROM users WHERE reset_token = ? AND reset_token_expiry > CURRENT_TIMESTAMP").get(token) as any;
+
+    if (!user) {
+      return res.status(400).json({ success: false, message: "রিসেট টোকেনটি ভুল বা মেয়াদ শেষ হয়ে গেছে" });
+    }
+
+    db.prepare("UPDATE users SET password = ?, reset_token = NULL, reset_token_expiry = NULL WHERE id = ?").run(password, user.id);
+    res.json({ success: true, message: "পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে" });
   });
 
   app.post("/api/login", (req, res) => {
