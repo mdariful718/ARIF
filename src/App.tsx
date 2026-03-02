@@ -95,7 +95,7 @@ const Logo = ({ className = "w-10 h-10", showText = false, orientation = "vertic
   </div>
 );
 
-const Header = ({ user, onLogout, onOpenAuth, onOpenDashboard, onOpenTrack }: { user: User | null, onLogout: () => void, onOpenAuth: () => void, onOpenDashboard: () => void, onOpenTrack: () => void }) => {
+const Header = ({ user, onLogout, onOpenAuth, onOpenDashboard, onOpenTrack }: { user: User | null, onLogout: () => void, onOpenAuth: (mode: 'login' | 'register') => void, onOpenDashboard: () => void, onOpenTrack: () => void }) => {
   return (
     <header className="bg-zinc-900 border-b border-zinc-800 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -149,12 +149,20 @@ const Header = ({ user, onLogout, onOpenAuth, onOpenDashboard, onOpenTrack }: { 
               </button>
             </div>
           ) : (
-            <button 
-              onClick={onOpenAuth}
-              className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-lg transition-all shadow-lg shadow-emerald-500/20"
-            >
-              Login
-            </button>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => onOpenAuth('login')}
+                className="px-4 py-2 text-zinc-400 hover:text-white font-bold transition-colors"
+              >
+                Login
+              </button>
+              <button 
+                onClick={() => onOpenAuth('register')}
+                className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-lg transition-all shadow-lg shadow-emerald-500/20"
+              >
+                Sign Up
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -1539,7 +1547,10 @@ export default function App() {
       <Header 
         user={user} 
         onLogout={handleLogout} 
-        onOpenAuth={() => setIsAuthOpen(true)} 
+        onOpenAuth={(mode) => {
+          setAuthMode({ mode });
+          setIsAuthOpen(true);
+        }} 
         onOpenDashboard={() => setIsDashboardOpen(true)}
         onOpenTrack={() => setIsTrackOpen(true)}
       />
