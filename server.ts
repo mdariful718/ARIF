@@ -96,6 +96,18 @@ db.exec(`
     db.prepare("ALTER TABLE orders ADD COLUMN order_id_string TEXT").run();
   } catch (e) {}
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      amount REAL,
+      type TEXT, -- 'credit' or 'debit'
+      description TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    );
+  `);
+
 // Seed initial data if empty
 const packageCount = db.prepare("SELECT COUNT(*) as count FROM packages").get() as { count: number };
 if (packageCount.count <= 45) { // Increased threshold to trigger re-seed with new packages
@@ -439,6 +451,11 @@ async function startServer() {
       if (user.wallet_balance >= pkg.price) {
         db.prepare("UPDATE users SET wallet_balance = wallet_balance - ? WHERE id = ?").run(pkg.price, user_id);
         const info = db.prepare("INSERT INTO orders (user_id, package_id, player_uid, payment_method, order_id_string) VALUES (?, ?, ?, ?, ?)").run(user_id, package_id, player_uid, 'wallet', orderIdString);
+        
+        // Record transaction
+        db.prepare("INSERT INTO transactions (user_id, amount, type, description) VALUES (?, ?, ?, ?)")
+          .run(user_id, pkg.price, 'debit', `Order Payment: ${orderIdString}`);
+          
         res.json({ success: true, message: "Order placed successfully", order_id_string: orderIdString, id: info.lastInsertRowid });
       } else {
         res.status(400).json({ success: false, message: "Insufficient wallet balance" });
@@ -487,6 +504,22 @@ async function startServer() {
       ORDER BY created_at DESC
     `).all(req.params.user_id);
     res.json(orders);
+  });
+
+  app.get("/api/transactions/:user_id", (req, res) => {
+    const transactions = db.prepare("SELECT * FROM transactions WHERE user_id = ? ORDER BY created_at DESC").all(req.params.user_id);
+    res.json(transactions);
+  });
+
+  app.post("/api/wallet/add-money", (req, res) => {
+    const { user_id, amount, method, transaction_id } = req.body;
+    // In a real app, this would be verified. Here we just add it for demo.
+    db.prepare("UPDATE users SET wallet_balance = wallet_balance + ? WHERE id = ?").run(amount, user_id);
+    db.prepare("INSERT INTO transactions (user_id, amount, type, description) VALUES (?, ?, ?, ?)")
+      .run(user_id, amount, 'credit', `Wallet Top-up via ${method} (ID: ${transaction_id})`);
+    
+    const user = db.prepare("SELECT wallet_balance FROM users WHERE id = ?").get(user_id);
+    res.json({ success: true, wallet_balance: (user as any).wallet_balance });
   });
 
   app.get("/api/check-player/:uid", (req, res) => {

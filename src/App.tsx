@@ -51,6 +51,15 @@ interface Order {
   completed_at?: string;
 }
 
+interface Transaction {
+  id: number;
+  user_id: number;
+  amount: number;
+  type: 'credit' | 'debit';
+  description: string;
+  created_at: string;
+}
+
 // --- Components ---
 
 const Logo = ({ className = "w-10 h-10", showText = false, orientation = "vertical" }: { className?: string, showText?: boolean, orientation?: "horizontal" | "vertical" }) => (
@@ -1273,44 +1282,72 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess, initialMode = 'login', init
   );
 };
 
-const Dashboard = ({ user, isOpen, onClose }: { user: User | null, isOpen: boolean, onClose: () => void }) => {
+const Dashboard = ({ user, isOpen, onClose, onRefreshUser }: { user: User | null, isOpen: boolean, onClose: () => void, onRefreshUser: () => void }) => {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [activeTab, setActiveTab] = useState<'history' | 'wallet' | 'profile'>('history');
+  const [isAddingMoney, setIsAddingMoney] = useState(false);
+
+  const fetchData = async () => {
+    if (isOpen && user) {
+      // Fetch Orders
+      const userOrdersRes = await fetch(`/api/orders/${user.id}`);
+      const userOrders = await userOrdersRes.json();
+      
+      const guestOrderIds = JSON.parse(localStorage.getItem('guest_orders') || '[]');
+      let allOrders = userOrders;
+
+      if (guestOrderIds.length > 0) {
+        const guestOrdersRes = await fetch('/api/orders/guest-history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderIds: guestOrderIds })
+        });
+        const guestOrders = await guestOrdersRes.json();
+        const orderMap = new Map();
+        userOrders.forEach((o: Order) => orderMap.set(o.id, o));
+        guestOrders.forEach((o: Order) => orderMap.set(o.id, o));
+        allOrders = Array.from(orderMap.values());
+        allOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      }
+      setOrders(allOrders);
+
+      // Fetch Transactions
+      const transRes = await fetch(`/api/transactions/${user.id}`);
+      const transData = await transRes.json();
+      setTransactions(transData);
+    }
+  };
 
   useEffect(() => {
-    const fetchOrders = async () => {
-      if (isOpen) {
-        let allOrders: Order[] = [];
-        if (user) {
-          const userOrdersRes = await fetch(`/api/orders/${user.id}`);
-          allOrders = await userOrdersRes.json();
-        }
-        
-        const guestOrderIds = JSON.parse(localStorage.getItem('guest_orders') || '[]');
-        
-        if (guestOrderIds.length > 0) {
-          const guestOrdersRes = await fetch('/api/orders/guest-history', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderIds: guestOrderIds })
-          });
-          const guestOrders = await guestOrdersRes.json();
-          
-          // Merge and remove duplicates (by id)
-          const orderMap = new Map();
-          allOrders.forEach(o => orderMap.set(o.id, o));
-          guestOrders.forEach((o: Order) => orderMap.set(o.id, o));
-          allOrders = Array.from(orderMap.values());
-          
-          // Sort by date descending
-          allOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        }
-        
-        setOrders(allOrders);
-      }
-    };
-    fetchOrders();
+    fetchData();
   }, [isOpen, user?.id]);
+
+  const handleAddMoneyDemo = async (method: string) => {
+    if (!user || isAddingMoney) return;
+    setIsAddingMoney(true);
+    try {
+      const res = await fetch('/api/wallet/add-money', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.id,
+          amount: 500,
+          method,
+          transaction_id: 'DEMO' + Math.floor(Math.random() * 1000000)
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        onRefreshUser();
+        fetchData();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsAddingMoney(false);
+    }
+  };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -1475,15 +1512,22 @@ const Dashboard = ({ user, isOpen, onClose }: { user: User | null, isOpen: boole
             <div className="space-y-6">
               <div className="bg-emerald-500/10 border border-emerald-500/20 p-8 rounded-3xl text-center">
                 <span className="text-zinc-400 text-sm font-medium">Current Balance</span>
-                <h3 className="text-4xl font-black text-emerald-400 mt-1">৳{user.wallet_balance.toFixed(2)}</h3>
+                <h3 className="text-4xl font-black text-emerald-400 mt-1">৳{user?.wallet_balance.toFixed(2)}</h3>
               </div>
               
               <div>
                 <h4 className="text-white font-bold mb-4">Add Money</h4>
                 <div className="grid grid-cols-3 gap-4">
                   {['bKash', 'Nagad', 'Rocket'].map(method => (
-                    <button key={method} className="bg-zinc-800 border border-zinc-700 p-4 rounded-2xl hover:border-emerald-500 transition-all flex flex-col items-center gap-2">
-                      <div className="w-10 h-10 bg-zinc-700 rounded-lg" />
+                    <button 
+                      key={method} 
+                      disabled={isAddingMoney}
+                      onClick={() => handleAddMoneyDemo(method)}
+                      className="bg-zinc-800 border border-zinc-700 p-4 rounded-2xl hover:border-emerald-500 transition-all flex flex-col items-center gap-2 disabled:opacity-50"
+                    >
+                      <div className="w-10 h-10 bg-zinc-700 rounded-lg flex items-center justify-center">
+                        <Wallet className="w-5 h-5 text-zinc-400" />
+                      </div>
                       <span className="text-xs font-bold text-zinc-300">{method}</span>
                     </button>
                   ))}
@@ -1491,6 +1535,27 @@ const Dashboard = ({ user, isOpen, onClose }: { user: User | null, isOpen: boole
                 <p className="mt-4 text-xs text-zinc-500 leading-relaxed">
                   To add money, select a payment method and follow the instructions. Automatic payment gateway is coming soon!
                 </p>
+              </div>
+
+              <div>
+                <h4 className="text-white font-bold mb-4">Transaction History</h4>
+                <div className="space-y-3">
+                  {transactions.length === 0 ? (
+                    <div className="text-center py-8 text-zinc-500 text-sm">No transactions yet.</div>
+                  ) : (
+                    transactions.map(tx => (
+                      <div key={tx.id} className="bg-zinc-800/30 border border-zinc-700/50 p-4 rounded-xl flex justify-between items-center">
+                        <div>
+                          <div className="text-zinc-200 text-sm font-medium">{tx.description}</div>
+                          <div className="text-zinc-500 text-[10px] mt-1">{formatDate(tx.created_at)}</div>
+                        </div>
+                        <div className={`font-bold ${tx.type === 'credit' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {tx.type === 'credit' ? '+' : '-'}৳{tx.amount}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -1725,12 +1790,14 @@ export default function App() {
           user={user} 
           isOpen={isDashboardOpen} 
           onClose={() => setIsDashboardOpen(false)} 
+          onRefreshUser={refreshUser}
         />
       ) : (
         <Dashboard 
           user={null} 
           isOpen={isDashboardOpen} 
           onClose={() => setIsDashboardOpen(false)} 
+          onRefreshUser={refreshUser}
         />
       )}
 
