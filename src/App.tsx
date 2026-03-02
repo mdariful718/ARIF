@@ -861,6 +861,19 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess, initialMode = 'login', init
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isBackendOnline, setIsBackendOnline] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      // Check backend health when modal opens
+      fetch('/api/packages')
+        .then(res => {
+          if (res.ok) setIsBackendOnline(true);
+          else setIsBackendOnline(false);
+        })
+        .catch(() => setIsBackendOnline(false));
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     setMode(initialMode);
@@ -1118,11 +1131,19 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess, initialMode = 'login', init
               <motion.div 
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 text-red-500 text-sm font-medium"
+                className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 text-red-500 text-sm font-medium mb-4"
               >
                 <ShieldAlert className="w-4 h-4 shrink-0" />
                 {error}
               </motion.div>
+            )}
+
+            {/* Backend Status Indicator for Debugging */}
+            {isBackendOnline === false && (
+              <div className="mb-6 p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 text-red-500 text-xs font-medium">
+                <ShieldAlert className="w-4 h-4 shrink-0" />
+                সার্ভার কানেক্ট করা যাচ্ছে না। দয়া করে ইন্টারনেট চেক করুন।
+              </div>
             )}
             
             <button 
